@@ -109,6 +109,25 @@ func schemaNodeConfig() *schema.Schema {
 					Type:        schema.TypeList,
 					Optional:    true,
 					MaxItems:    1,
+					Description: `Reservation Affinity configuration for this node.`,
+					ForceNew:    true,
+					Elem: &schema.Resource{
+						Schema: map[string]*schema.Schema{
+							"consume_reservation_type": {
+								Type:        schema.TypeString,
+								Required:    true,
+								ForceNew:    true,
+								Description: `The ConsumeReservationType.`,
+								// TODO: Implement SPECIFIC.
+							},
+						},
+					},
+				},
+
+				"reservation_affinity": {
+					Type:        schema.TypeList,
+					Optional:    true,
+					MaxItems:    1,
 					Description: `GCFS configuration for this node.`,
 					ForceNew:    true,
 					Elem: &schema.Resource{
@@ -353,6 +372,13 @@ func expandNodeConfig(v interface{}) *container.NodeConfig {
 			Enabled: conf["enabled"].(bool),
 		}
 	}
+	if v, ok := nodeConfig["reservation_affinity"]; ok && len(v.([]interface{})) > 0 {
+		conf := v.([]interface{})[0].(map[string]interface{})
+		nc.ReservationAffinity = &container.ReservationAffinity{
+			ConsumeReservationType: conf["consume_reservation_type"].(string),
+			// TODO (Alex): Support SPECIFIC reservations.
+		}
+	}
 
 	if v, ok := nodeConfig["gvnic"]; ok && len(v.([]interface{})) > 0 {
 		conf := v.([]interface{})[0].(map[string]interface{})
@@ -484,6 +510,7 @@ func flattenNodeConfig(c *container.NodeConfig) []map[string]interface{} {
 		"guest_accelerator":        flattenContainerGuestAccelerators(c.Accelerators),
 		"local_ssd_count":          c.LocalSsdCount,
 		"gcfs_config":              flattenGcfsConfig(c.GcfsConfig),
+		"reservation_affinity":     flattenContainerReservationAffinity(c.ReservationAffinity),
 		"gvnic":                    flattenGvnic(c.Gvnic),
 		"service_account":          c.ServiceAccount,
 		"metadata":                 c.Metadata,
@@ -537,6 +564,25 @@ func flattenGcfsConfig(c *container.GcfsConfig) []map[string]interface{} {
 		})
 	}
 	return result
+}
+
+func flattenContainerReservationAffinity(affinity *container.ReservationAffinity) []map[string]interface{} {
+	if affinity == nil {
+		return nil
+	}
+
+	flattened := map[string]interface{}{
+		"type": affinity.ConsumeReservationType,
+	}
+
+	if affinity.ConsumeReservationType == "SPECIFIC_RESERVATION" {
+		flattened["specific_reservation"] = []map[string]interface{}{{
+			"key":    affinity.Key,
+			"values": affinity.Values,
+		}}
+	}
+
+	return []map[string]interface{}{flattened}
 }
 
 func flattenGvnic(c *container.VirtualNIC) []map[string]interface{} {
